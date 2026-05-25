@@ -1,0 +1,6 @@
+{
+  "name": "نظام الأرشيف الرقمي - ورقلة",
+  "description": "الواجهة الاحترافية للبحث الآلي وإدارة أرشيف المديرية الجهوية للميزانية لولاية ورقلة - وزارة المالية الجزائرية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
