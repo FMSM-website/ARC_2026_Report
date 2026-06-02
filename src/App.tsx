@@ -7,6 +7,9 @@ import { OfficialHeader } from './components/OfficialHeader';
 import { LoginScreen } from './components/LoginScreen';
 import { PrintCardModal } from './components/PrintCardModal';
 import { ExcelImportWizard } from './components/ExcelImportWizard';
+import { OfflineBackupHubModal } from './components/OfflineBackupHubModal';
+import { AdminDashboardModal } from './components/AdminDashboardModal';
+import { checkServerStatus, fetchRecords, saveRecords } from './utils/syncEngine';
 import {
   Search,
   Plus,
@@ -78,9 +81,29 @@ export default function App() {
     return cached ? JSON.parse(cached) : SHEET_TABS;
   });
 
+  const [isSyncLoaded, setIsSyncLoaded] = useState(false);
+  const [isLanServerOnline, setIsLanServerOnline] = useState(false);
+
+  // الكشف عن الخادم المحلي LAN محلياً وتحميل السجلات الموحدة منه فوراً
   useEffect(() => {
-    localStorage.setItem('alg_archive_records_v1', JSON.stringify(records));
-  }, [records]);
+    async function initSync() {
+      const online = await checkServerStatus();
+      setIsLanServerOnline(online);
+      if (online) {
+        const remoteRecords = await fetchRecords();
+        setRecords(remoteRecords);
+      }
+      setIsSyncLoaded(true);
+    }
+    initSync();
+  }, []);
+
+  // أتمتة تدوين وحفظ التعديلات للخادم المركزي أو المتصفح المحلي حسب الاتصال وبشكل صامت
+  useEffect(() => {
+    if (isSyncLoaded) {
+      saveRecords(records);
+    }
+  }, [records, isSyncLoaded]);
 
   useEffect(() => {
     localStorage.setItem('alg_archive_tabs_v1', JSON.stringify(sheetTabs));
@@ -109,6 +132,8 @@ export default function App() {
   // --- 5. النوافذ المنبثقة والمعالجات ---
   const [printRecord, setPrintRecord] = useState<ArchiveRecord | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [showOfflineHub, setShowOfflineHub] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   
   // حقول إضافة وتعديل سجل
   const [isAdding, setIsAdding] = useState(false);
@@ -174,6 +199,8 @@ export default function App() {
                 cardNumber: formCardNumber,
                 fundTitle: formFundTitle,
                 sheet: formSheet,
+                archivistName: activeUser?.fullName || r.archivistName,
+                department: activeUser?.matsaleh || r.department,
                 updatedAt: new Date().toISOString()
               }
             : r
@@ -638,7 +665,26 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="bg-emerald-800/80 text-emerald-100 p-1 px-3 rounded-md border border-emerald-700 font-mono text-[10px]">
+            {activeUser.username === 'admin' && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="flex items-center gap-1.5 p-1 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-md transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-95"
+              >
+                🛠️ لوحة رصد ومراقبة المصلحة
+              </button>
+            )}
+            {isLanServerOnline ? (
+              <span className="bg-indigo-950 text-indigo-300 p-1.5 px-3 rounded-md border border-indigo-800 font-sans text-[10px] flex items-center gap-1.5 shadow-xs">
+                <span className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse shrink-0"></span>
+                🌐 خادم الشبكة المحلية LAN: متصل ومزامن تلقائياً
+              </span>
+            ) : (
+              <span className="bg-slate-850 text-slate-400 p-1.5 px-3 rounded-md border border-slate-800 font-sans text-[10px] flex items-center gap-1.5" title="يعمل بنمط الفلاش ديسك المنفصل حيث تخزن السجلات محلياً في المتصفح">
+                <span className="w-2 h-2 bg-amber-500 rounded-full shrink-0"></span>
+                💾 نمط مستقل (فلاش ديسك)
+              </span>
+            )}
+            <span className="bg-emerald-800/80 text-emerald-100 p-1.5 px-3 rounded-md border border-emerald-700 font-mono text-[10px]">
               🔒 جلسة عمل مؤمنة لمصلحة ورقلة
             </span>
             <button
@@ -1385,6 +1431,15 @@ export default function App() {
         />
       )}
 
+      {/* 9.0 Manager centers */}
+      {showAdminPanel && (
+        <AdminDashboardModal
+          records={records}
+          sheetTabs={SHEET_TABS}
+          onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+
       {/* 9.1 Custom iframe-safe state-based confirmation dialogs */}
       {recordToDelete && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-55">
@@ -1489,6 +1544,15 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {showOfflineHub && (
+        <OfflineBackupHubModal
+          records={records}
+          sheetTabs={sheetTabs}
+          onRestoreDatabase={(updated) => setRecords(updated)}
+          onClose={() => setShowOfflineHub(false)}
+        />
       )}
 
       {/* 10. Dedicated High Profile Algerian Footer */}
